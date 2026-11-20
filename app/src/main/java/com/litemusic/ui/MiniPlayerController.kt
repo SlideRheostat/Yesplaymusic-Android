@@ -5,7 +5,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.view.Gravity
 import android.view.View
-import android.view.animation.PathInterpolator
+import androidx.core.view.animation.PathInterpolatorCompat
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -34,7 +34,7 @@ class MiniPlayerController(activity: Activity, root: View) : PlayerService.Liste
     private val next: MaterialButton = root.findViewById(R.id.mini_next)
     private val progressRing: MiniProgressRing = root.findViewById(R.id.mini_progress)
 
-    private val decelerate = PathInterpolator(0.05f, 0.7f, 0.1f, 1f)
+    private val decelerate = PathInterpolatorCompat.create(0.05f, 0.7f, 0.1f, 1f)
     /** 已显示的播放态，避免重复设置图标 */
     private var shownPlaying: Boolean? = null
 

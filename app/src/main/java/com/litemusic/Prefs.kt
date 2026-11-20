@@ -143,6 +143,45 @@ object Prefs {
 
     val loggedIn: Boolean get() = musicU.isNotEmpty()
 
+    // ---- 搜索历史：最近 50 个关键词，去重，最新在前 ----
+
+    fun searchHistory(): List<String> {
+        val raw = sp.getString("searchHistory", "") ?: ""
+        if (raw.isEmpty()) return emptyList()
+        return try {
+            val arr = org.json.JSONArray(raw)
+            val out = ArrayList<String>(arr.length())
+            for (i in 0 until arr.length()) {
+                val s = arr.optString(i)
+                if (s.isNotEmpty()) out.add(s)
+            }
+            out
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun recordSearch(keyword: String) {
+        val kw = keyword.trim()
+        if (kw.isEmpty()) return
+        val list = searchHistory().toMutableList()
+        list.remove(kw)
+        list.add(0, kw)
+        while (list.size > 50) list.removeAt(list.size - 1)
+        val arr = org.json.JSONArray()
+        for (s in list) arr.put(s)
+        sp.edit().putString("searchHistory", arr.toString()).apply()
+    }
+
+    /** 删除单条搜索历史（长按标签删除） */
+    fun removeSearch(keyword: String) {
+        val list = searchHistory().toMutableList()
+        if (!list.remove(keyword)) return
+        val arr = org.json.JSONArray()
+        for (s in list) arr.put(s)
+        sp.edit().putString("searchHistory", arr.toString()).apply()
+    }
+
     fun clearLogin() {
         sp.edit().remove("musicU").remove("csrf").remove("userId")
             .remove("nickname").remove("avatar").remove("vipType")

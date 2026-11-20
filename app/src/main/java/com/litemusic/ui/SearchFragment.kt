@@ -1,20 +1,27 @@
 package com.litemusic.ui
 
+import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
 import com.litemusic.Api
+import com.litemusic.HistoryStore
 import com.litemusic.ImageLoader
 import com.litemusic.Playlist
 import com.litemusic.Prefs
@@ -38,10 +45,13 @@ class SearchFragment : Fragment() {
     private lateinit var scopeGroup: ChipGroup
     private lateinit var labelObject: View
     private lateinit var labelFilter: View
+    private lateinit var labelHistory: TextView
+    private lateinit var historyGroup: ChipGroup
 
     private var scope = Scope.ALL
     private var type = Type.SONG
     private var requestToken = 0
+    private var lastRecordedKeyword = ""
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -55,7 +65,15 @@ class SearchFragment : Fragment() {
         scopeGroup = view.findViewById(R.id.scope_group)
         labelObject = view.findViewById(R.id.label_search_object)
         labelFilter = view.findViewById(R.id.label_search_filter)
+        labelHistory = view.findViewById(R.id.label_history)
+        historyGroup = view.findViewById(R.id.history_group)
         recycler.layoutManager = LinearLayoutManager(requireContext())
+
+        // 点击搜索框以外的任何区域都会收起键盘，且不拦截列表点击
+        (view as SearchRootLayout).apply {
+            ignoreView = view.findViewById(R.id.search_layout)
+            onOutsideTouchUp = { dismissSearchFocus() }
+        }
 
         typeGroup.setOnCheckedStateChangeListener { _, checkedIds ->
             type = when (checkedIds.firstOrNull()) {
@@ -100,20 +118,69 @@ class SearchFragment : Fragment() {
 
     /** 输入为空时回车/搜索 → 回到搜索首页 */
     private fun doSearch() {
-        if (keyword().isEmpty()) {
-            showHome()
-        } else {
-            runSearch()
-        }
+        val kw = keyword()
+        if (kw.isEmpty()) showHome() else runSearch()
     }
 
     private fun showHome() {
         requestToken++
         if (!isAdded) return
         recycler.adapter = null
+        renderHistory()
         emptyTip.text = getString(R.string.search_home_tip)
-        emptyTip.visibility = View.VISIBLE
+        emptyTip.visibility = if (Prefs.searchHistory().isEmpty()) View.VISIBLE else View.GONE
         setFiltersVisible(true)
+    }
+
+    /** 搜索历史：横向排列的小按钮，点击直接再次搜索 */
+    private fun renderHistory() {
+        if (!isAdded) return
+        val list = Prefs.searchHistory()
+        historyGroup.removeAllViews()
+        val show = list.isNotEmpty()
+        labelHistory.visibility = if (show) View.VISIBLE else View.GONE
+        historyGroup.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show) return
+        val stroke = ColorStateList.valueOf(
+            MaterialColors.getColor(historyGroup, com.google.android.material.R.attr.colorOutline, 0)
+        )
+        val fg = MaterialColors.getColor(
+            historyGroup, com.google.android.material.R.attr.colorOnSurfaceVariant, 0
+        )
+        for (kw in list) {
+            val chip = Chip(requireContext())
+            chip.text = kw
+            chip.isCheckable = false
+            chip.isClickable = true
+            // 与未选中的搜索对象一致：透明填充 + 描边
+            chip.setChipBackgroundColor(ColorStateList.valueOf(Color.TRANSPARENT))
+            chip.chipStrokeWidth = resources.displayMetrics.density
+            chip.chipStrokeColor = stroke
+            chip.setTextColor(fg)
+            chip.isChipIconVisible = false
+            chip.setOnClickListener {
+                input.setText(kw)
+                input.setSelection(kw.length)
+                doSearch()
+            }
+            // 长按删除该条搜索历史
+            chip.setOnLongClickListener {
+                Prefs.removeSearch(kw)
+                renderHistory()
+                emptyTip.visibility =
+                    if (Prefs.searchHistory().isEmpty()) View.VISIBLE else View.GONE
+                Toast.makeText(requireContext(), R.string.search_history_removed, Toast.LENGTH_SHORT).show()
+                true
+            }
+            historyGroup.addView(chip)
+        }
+    }
+
+    private fun dismissSearchFocus() {
+        if (!input.hasFocus()) return
+        input.clearFocus()
+        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(input.windowToken, 0)
     }
 
     /** 「搜索对象」「筛选」只在首页显示，结果页隐藏 */
@@ -123,6 +190,10 @@ class SearchFragment : Fragment() {
         labelFilter.visibility = v
         scopeGroup.visibility = v
         typeGroup.visibility = if (visible && scope == Scope.ALL) View.VISIBLE else View.GONE
+        if (!visible) {
+            labelHistory.visibility = View.GONE
+            historyGroup.visibility = View.GONE
+        }
     }
 
     private fun runSearch() {
@@ -136,6 +207,10 @@ class SearchFragment : Fragment() {
             Toast.makeText(requireContext(), R.string.not_logged_in, Toast.LENGTH_SHORT).show()
             showHome()
             return
+        }
+        if (kw != lastRecordedKeyword) {
+            Prefs.recordSearch(kw)
+            lastRecordedKeyword = kw
         }
         val token = ++requestToken
         recycler.adapter = null
@@ -189,8 +264,12 @@ class SearchFragment : Fragment() {
         val load = {
             Api.userPlaylist(Prefs.userId) { r ->
                 if (!isAdded || token != requestToken) return@userPlaylist
-                r.onSuccess { (_, list) -> showItems(list.filter { matches(it, kw) }, Type.PLAYLIST) }
-                    .onFailure { showFailure(it) }
+                r.onSuccess { (_, list) ->
+                    // 历史记录作为私人歌单固定放在最后
+                    val merged = ArrayList<Playlist>(list)
+                    merged.add(HistoryStore.playlist(requireContext()))
+                    showItems(merged.filter { matches(it, kw) }, Type.PLAYLIST)
+                }.onFailure { showFailure(it) }
             }
         }
         if (Prefs.userId == 0L) {
@@ -222,10 +301,25 @@ class SearchFragment : Fragment() {
     }
 
     private fun showItems(list: List<Playlist>, kind: Type) {
-        renderEmptyState(list.isEmpty())
-        recycler.adapter = if (list.isEmpty()) null else ResultAdapter(list, kind) { p ->
+        val items = if (kind == Type.PLAYLIST) {
+            val merged = ArrayList(list)
+            // 全站/本地歌单搜索结果都允许搜到本地历史记录歌单
+            if (merged.none { it.history }) {
+                val history = HistoryStore.playlist(requireContext())
+                if (matches(history, keyword())) merged.add(history)
+            }
+            merged
+        } else {
+            list
+        }
+        renderEmptyState(items.isEmpty())
+        recycler.adapter = if (items.isEmpty()) null else ResultAdapter(items, kind) { p ->
             when (kind) {
-                Type.PLAYLIST -> startActivity(PlaylistActivity.launch(requireContext(), p.id, p.name))
+                Type.PLAYLIST -> if (p.history) {
+                    startActivity(HistoryActivity.launch(requireContext()))
+                } else {
+                    startActivity(PlaylistActivity.launch(requireContext(), p.id, p.name))
+                }
                 Type.ALBUM -> startActivity(PlaylistActivity.album(requireContext(), p.id, p.name))
                 Type.ARTIST -> startActivity(ArtistActivity.launch(requireContext(), p.id, p.name))
                 else -> {}
@@ -280,9 +374,14 @@ class SearchFragment : Fragment() {
                     getString(R.string.track_count, p.trackCount),
                 ).joinToString(" · ")
                 Type.ARTIST -> getString(R.string.album_count, p.albumCount)
-                else -> getString(R.string.playlist_meta, p.trackCount, HomeFragment.formatCount(p.playCount))
+                else -> if (p.history) getString(R.string.track_count, p.trackCount)
+                else getString(R.string.playlist_meta, p.trackCount, HomeFragment.formatCount(p.playCount))
             }
-            ImageLoader.load(h.cover, p.cover, 120)
+            if (p.localCover != 0) {
+                h.cover.setImageResource(p.localCover)
+            } else {
+                ImageLoader.load(h.cover, p.cover, 120)
+            }
             h.itemView.setOnClickListener { onClick(p) }
         }
     }

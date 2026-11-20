@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 横屏：M3 Navigation Rail（80dp 宽、56×32 指示器、顶部起始、图标 + 标签） -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
@@ -60,8 +61,8 @@
                             android:layout_height="24dp"
                             android:layout_gravity="center"
                             android:contentDescription="@string/tab_home"
-                            android:src="@drawable/ic_home_outlined"
-                            android:tint="?attr/colorOnSurfaceVariant" />
+                            app:srcCompat="@drawable/ic_home_outlined"
+                            app:tint="?attr/colorOnSurfaceVariant" />
                     </FrameLayout>
 
                     <TextView
@@ -100,8 +101,8 @@
                             android:layout_height="24dp"
                             android:layout_gravity="center"
                             android:contentDescription="@string/tab_search"
-                            android:src="@drawable/ic_search_symbol"
-                            android:tint="?attr/colorOnSurfaceVariant" />
+                            app:srcCompat="@drawable/ic_search_symbol"
+                            app:tint="?attr/colorOnSurfaceVariant" />
                     </FrameLayout>
 
                     <TextView
@@ -140,8 +141,8 @@
                             android:layout_height="24dp"
                             android:layout_gravity="center"
                             android:contentDescription="@string/tab_mine"
-                            android:src="@drawable/ic_account_circle"
-                            android:tint="?attr/colorOnSurfaceVariant" />
+                            app:srcCompat="@drawable/ic_account_circle"
+                            app:tint="?attr/colorOnSurfaceVariant" />
                     </FrameLayout>
 
                     <TextView

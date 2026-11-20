@@ -4,7 +4,7 @@
 ### 与yesplaymusic不同之处
 - 本项目基于Kotlin实现，不依赖 WebView，
 - 本项目使用Material Design 3主题与动效，同时融入我自己的好恶，个人认为UI还算优雅
-- 目前适配了Android 5.0及以上的移动设备
+- 目前适配了Android 4.4及以上的移动设备
 
 接下来看一下AI写的README.md吧
 
@@ -12,7 +12,7 @@
 
 一个基于 Kotlin + Material Design 3 的原生 Android 网易云音乐客户端。
 
-项目以 YesPlayMusic 的产品形态为参考，使用原生 Android 重新实现，不依赖 WebView。整体定位是**轻量、低依赖、兼容低版本设备**：`minSdk 21`，核心网络、图片加载、音频缓存、歌词渲染均为vibe coding实现。
+项目以 YesPlayMusic 的产品形态为参考，使用原生 Android 重新实现，不依赖 WebView。整体定位是**轻量、低依赖、兼容低版本设备**：`minSdk 19`，核心网络、图片加载、音频缓存、歌词渲染均为vibe coding实现。
 
 > 本项目仅用于学习与个人使用，与网易云音乐官方无关。接口可能随官方调整而失效，请勿用于商业用途。
 
@@ -34,7 +34,7 @@
 - 后台播放服务 + 前台通知
 - 顺序播放 / 单曲循环 / 随机播放
 - 上一首、下一首、进度拖动
-- 锁屏与通知栏媒体控制（API 21+）
+- 锁屏媒体控制（API 21+）；通知栏三键与耳机按键（API 19+）
 - 耳机拔出自动暂停
 - 音频焦点管理
 - 播放失败自动跳过，连续失败保护
@@ -56,7 +56,11 @@
 - Material Design 3 主题与动效
 - 跟随系统 / 浅色 / 深色模式
 - 竖屏 Navigation Bar，横屏 Navigation Rail
-- 横屏「我的」音乐库布局：账号栏 + 我喜欢的音乐卡片 + 两列歌曲网格 + 歌单/专辑/艺人/听歌排行切换条（点击或拖拽切换，内容与指示条同步跟手滚动，点击后吸顶）
+- 横屏「我的」音乐库布局：账号栏 + 我喜欢的音乐卡片 + 两列歌曲网格 + 歌单/专辑/艺人/排行切换条（点击或拖拽切换，内容与指示条同步跟手滚动，点击后吸顶）
+- 竖屏「我的」音乐库：设置下方左对齐的分类选择器，弹窗切换歌单/专辑/艺人/排行
+- 历史记录：最近 50 首不重复歌曲作为私人歌单排在歌单最后，支持搜索与专属封面
+- 搜索历史：最近 50 个关键词以横向小按钮展示，点击可再次搜索
+- 「我喜欢的音乐」与「每日推荐」使用第一首歌的封面
 - 横屏「我的」卡片网格列数与首页一致，随屏幕宽度自适应
 - 听歌排行：最近一周 / 所有时间，显示播放次数，可直接按排行播放
 - 听歌打卡：登录后播放会同步「最近播放」与「听歌排行」（切歌/播完/退出时上报）
@@ -79,7 +83,7 @@
 |---|---|
 | 语言 | Kotlin |
 | 构建 | Gradle Kotlin DSL + Android Gradle Plugin 9.4.1 |
-| 最低版本 | Android 5.0（API 21） |
+| 最低版本 | Android 4.4（API 19） |
 | 目标版本 | Android 14（API 34） |
 | 编译版本 | Android 16（API 36） |
 | UI | XML 布局 + Material Components 1.12 |
@@ -102,7 +106,7 @@ androidx.recyclerview:recyclerview:1.3.2
 com.google.zxing:core:3.5.3
 ```
 
-依赖版本为兼容 `minSdk 21` 特意选择，未使用 OkHttp、Retrofit、Glide、Coil、Room、Coroutines 或依赖注入框架。
+依赖版本为兼容 `minSdk 19` 特意选择，未使用 OkHttp、Retrofit、Glide、Coil、Room、Coroutines 或依赖注入框架。
 
 ---
 
@@ -128,7 +132,10 @@ LiteMusicAndroid/
 │       │   ├── Kana.kt                罗马音转平假名
 │       │   ├── player/
 │       │   │   ├── PlayerService.kt   播放服务、队列、通知、媒体会话
-│       │   │   └── PlayerCompat21.kt  API 21+ 专属实现隔离
+│       │   │   ├── PlayerCompat21.kt  API 21+ 专属实现隔离
+│       │   │   ├── PlayerCompat26.kt  API 26+ 通知渠道/前台服务隔离
+│       │   │   ├── PlayerCompat29.kt  API 29+ 前台服务类型隔离
+│       │   │   └── MediaButtonReceiver.kt  API 19/20 媒体按键转发
 │       │   └── ui/
 │       │       ├── MainActivity.kt
 │       │       ├── HomeFragment.kt
@@ -244,8 +251,8 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ### 版本信息
 
-- `versionName`: 3.3.3
-- `versionCode`: 55
+- `versionName`: 3.4.1
+- `versionCode`: 70
 - `applicationId`: `com.yesplaymusic.mobile`
 - 源码 namespace: `com.litemusic`
 
@@ -268,7 +275,7 @@ app/build/outputs/apk/debug/app-debug.apk
 - VIP、付费或下架歌曲可能无法播放。
 - 项目未包含单元测试与仪器测试。
 - 仓库不提交 APK 与构建产物，APK 建议通过 GitHub Releases 分发。
-- `minSdk 21` 限制了部分依赖版本与系统媒体 API 的使用，相关兼容逻辑集中在 `PlayerCompat21`。
+- `minSdk 19` 限制了部分依赖版本与系统媒体 API 的使用，相关兼容逻辑集中在 `PlayerCompat21/26/29` 与 `MediaButtonReceiver`；API 19/20 无系统 MediaSession，锁屏媒体面板不可用，但通知栏三键与耳机按键仍可控制播放。
 
 ---
 

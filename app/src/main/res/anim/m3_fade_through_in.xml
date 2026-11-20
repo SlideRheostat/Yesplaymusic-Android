@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- M3 Fade through（进入）：透明度 0→1，同时从 96% 轻微放大到 100% -->
 <set xmlns:android="http://schemas.android.com/apk/res/android"
-    android:interpolator="@android:interpolator/fast_out_slow_in"
+    android:interpolator="@android:interpolator/decelerate_quint"
     android:shareInterpolator="true">
 
     <alpha

@@ -9,7 +9,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.Interpolator
-import android.view.animation.PathInterpolator
+import androidx.core.view.animation.PathInterpolatorCompat
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -537,19 +537,19 @@ class PlayerActivity : AppCompatActivity(), PlayerService.Listener {
 
     /** 歌词滚动沿用原有曲线（源码同款缓动） */
     private fun lyricInterpolator(): Interpolator =
-        PathInterpolator(0.25f, 0.46f, 0.45f, 0.94f)
+        PathInterpolatorCompat.create(0.25f, 0.46f, 0.45f, 0.94f)
 
     /** 线性插值（匀速，用于进度条连贯补间） */
     private fun linearInterpolator(): Interpolator =
-        PathInterpolator(0f, 0f, 1f, 1f)
+        PathInterpolatorCompat.create(0f, 0f, 1f, 1f)
 
     /** M3 Emphasized decelerate（长时动效入场曲线） */
     private fun emphasizedDecelerate(): Interpolator =
-        PathInterpolator(0.05f, 0.7f, 0.1f, 1f)
+        PathInterpolatorCompat.create(0.05f, 0.7f, 0.1f, 1f)
 
     /** M3 Emphasized accelerate（长时动效退场曲线） */
     private fun emphasizedAccelerate(): Interpolator =
-        PathInterpolator(0.3f, 0f, 0.8f, 0.15f)
+        PathInterpolatorCompat.create(0.3f, 0f, 0.8f, 0.15f)
 
     private fun themeColor(attr: Int): Int {
         val tv = TypedValue()

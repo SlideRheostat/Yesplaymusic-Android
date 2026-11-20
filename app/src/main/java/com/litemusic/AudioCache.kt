@@ -100,6 +100,24 @@ object AudioCache {
         return files.size to files.sumOf { it.length() }
     }
 
+    /** 每首歌缓存占用的字节数（同一首歌可能有多个音质文件，合并计算） */
+    fun sizesById(): Map<Long, Long> {
+        val out = HashMap<Long, Long>()
+        for (e in entries()) {
+            out[e.id] = (out[e.id] ?: 0L) + e.file.length()
+        }
+        return out
+    }
+
+    /** 立即删除某首歌的全部缓存文件（含 .meta），不影响其他歌曲。调用方需在后台线程执行 */
+    fun deleteSongNow(id: Long) {
+        for (d in listOfNotNull(dir, legacyDir)) {
+            d.listFiles()?.forEach { f ->
+                if (f.name.substringBefore('-').toLongOrNull() == id) f.delete()
+            }
+        }
+    }
+
     private fun metaFile(f: File) = File(f.parentFile, f.name + ".meta")
 
     /** 读取缓存文件旁保存的歌曲元数据；老版本缓存没有元数据时返回 null */

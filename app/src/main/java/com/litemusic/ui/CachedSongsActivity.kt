@@ -39,6 +39,7 @@ class CachedSongsActivity : AppCompatActivity() {
 
     private var songs: List<Song> = emptyList()
     private var unknownIds: List<Long> = emptyList()
+    private var sizes: Map<Long, Long> = emptyMap()
     private var totalBytes = 0L
     private var firstResume = true
 
@@ -103,10 +104,12 @@ class CachedSongsActivity : AppCompatActivity() {
                 }
             }
             val bytes = AudioCache.summary().second
+            val sizeMap = AudioCache.sizesById()
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 songs = known.values.toList()
                 unknownIds = unknown
+                sizes = sizeMap
                 totalBytes = bytes
                 render()
                 resolveUnknown()
@@ -119,7 +122,12 @@ class CachedSongsActivity : AppCompatActivity() {
         subtitle.text = getString(R.string.cached_songs_summary, count, formatSize(totalBytes))
         emptyTip.visibility = if (count == 0) View.VISIBLE else View.GONE
         playAll.isEnabled = count > 0
-        recycler.adapter = SongAdapter(songs, showLike = false) { index ->
+        recycler.adapter = SongAdapter(
+            songs = songs,
+            showLike = false,
+            sizes = sizes,
+            onSizeLongClick = { song -> deleteCache(song) },
+        ) { index ->
             PlayerService.playCached(this, songs, index)
         }
         if (unknownIds.isEmpty()) loading.hide()
@@ -139,7 +147,7 @@ class CachedSongsActivity : AppCompatActivity() {
 
             val merged = LinkedHashMap<Long, Song>()
             for (s in songs) merged[s.id] = s
-            for (s in found) merged.putIfAbsent(s.id, s)
+            for (s in found) if (!merged.containsKey(s.id)) merged[s.id] = s
             // 查询失败也不能丢文件：用占位歌曲保证列表里仍可播放
             for (id in ids) {
                 if (!merged.containsKey(id)) {
@@ -167,5 +175,17 @@ class CachedSongsActivity : AppCompatActivity() {
         val mb = bytes / 1024.0 / 1024.0
         return if (mb >= 1024) String.format(Locale.US, "%.1f GB", mb / 1024) else
             String.format(Locale.US, "%.0f MB", mb)
+    }
+
+    /** 长按右侧缓存大小：只删除这一首歌的缓存 */
+    private fun deleteCache(song: Song) {
+        Thread {
+            AudioCache.deleteSongNow(song.id)
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                Toast.makeText(this, R.string.cache_removed, Toast.LENGTH_SHORT).show()
+                reload()
+            }
+        }.start()
     }
 }

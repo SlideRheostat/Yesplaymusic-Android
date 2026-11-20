@@ -10,7 +10,9 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.widget.ImageViewCompat
 import androidx.fragment.app.Fragment
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
@@ -163,7 +165,7 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
         if (Prefs.loggedIn) {
             // 先拉账号信息（自愈老版本遗留的 userId 缺失），完成后再刷新红心列表
@@ -330,8 +332,8 @@ class MainActivity : AppCompatActivity() {
                 icon.tag = newIcon
                 icon.setImageResource(newIcon)
             }
-            icon.imageTintList = ColorStateList.valueOf(
-                if (selected) colorActive else colorInactive
+            ImageViewCompat.setImageTintList(
+                icon, ColorStateList.valueOf(if (selected) colorActive else colorInactive)
             )
             label?.setTextColor(if (selected) colorOnSurface else colorInactive)
         }

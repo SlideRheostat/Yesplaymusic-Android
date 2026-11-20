@@ -2,5 +2,5 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
     <!-- M3 FAB/圆形主操作：primaryContainer 色调容器 -->
-    <solid android:color="?attr/colorPrimaryContainer" />
+    <solid android:color="@color/md_primary_container" />
 </shape>

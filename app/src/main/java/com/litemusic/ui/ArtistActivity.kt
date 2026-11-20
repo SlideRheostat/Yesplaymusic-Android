@@ -229,7 +229,7 @@ class ArtistActivity : AppCompatActivity() {
             chevron.animate()
                 .rotation(if (expanded) 0f else -90f)
                 .setDuration(250)
-                .setInterpolator(android.view.animation.PathInterpolator(0.05f, 0.7f, 0.1f, 1f))
+                .setInterpolator(androidx.core.view.animation.PathInterpolatorCompat.create(0.05f, 0.7f, 0.1f, 1f))
                 .start()
             itemView.setOnClickListener {
                 if (sec.isAlbums) albumsExpanded = !albumsExpanded else songsExpanded = !songsExpanded

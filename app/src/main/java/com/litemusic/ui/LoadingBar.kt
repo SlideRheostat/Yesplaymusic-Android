@@ -3,6 +3,7 @@ package com.litemusic.ui
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.RectF
 import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.View
@@ -37,6 +38,7 @@ class LoadingBar @JvmOverloads constructor(
     }
 
     private var startTime = 0L
+    private val rect = RectF()
 
     private val frame = object : Runnable {
         override fun run() {
@@ -80,7 +82,8 @@ class LoadingBar @JvmOverloads constructor(
         val radius = h / 2f
 
         // 轨道
-        canvas.drawRoundRect(0f, 0f, w, h, radius, radius, trackPaint)
+        rect.set(0f, 0f, w, h)
+        canvas.drawRoundRect(rect, radius, radius, trackPaint)
 
         val cycle = 1800f
         val t = ((SystemClock.uptimeMillis() - startTime).toFloat() / cycle) % 1f
@@ -90,15 +93,8 @@ class LoadingBar @JvmOverloads constructor(
 
         canvas.save()
         canvas.clipRect(0f, 0f, w, h)
-        canvas.drawRoundRect(
-            start,
-            0f,
-            start + segmentWidth,
-            h,
-            radius,
-            radius,
-            indicatorPaint,
-        )
+        rect.set(start, 0f, start + segmentWidth, h)
+        canvas.drawRoundRect(rect, radius, radius, indicatorPaint)
         canvas.restore()
     }
 

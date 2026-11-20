@@ -9,6 +9,9 @@ class App : Application() {
         Prefs.init(this)
         AudioCache.init(this)
         ImageLoader.init(this)
+        HistoryStore.init(this)
+        // API 19/20 通过 AppCompat 解析矢量资源（布局 src、菜单、drawable 引用）
+        AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
         applyTheme()
     }
 

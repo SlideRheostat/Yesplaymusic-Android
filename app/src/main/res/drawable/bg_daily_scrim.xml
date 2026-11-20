@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 每日推荐封面上的压暗蒙层：左侧更暗，保证白色大字可读 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="0"
+        android:centerColor="#59000000"
+        android:endColor="#1F000000"
+        android:startColor="#A6000000"
+        android:type="linear" />
+</shape>

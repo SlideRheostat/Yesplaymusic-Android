@@ -30,7 +30,7 @@
                 android:layout_height="56dp"
                 android:contentDescription="@null"
                 android:scaleType="centerCrop"
-                android:src="@drawable/ic_person"
+                app:srcCompat="@drawable/ic_person"
                 app:shapeAppearanceOverlay="@style/ShapeAppearance.Lite.Circle" />
 
             <LinearLayout
@@ -76,11 +76,14 @@
         android:orientation="horizontal"
         android:visibility="gone">
 
-        <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/fav_cover"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/colorSurfaceVariant"
             android:contentDescription="@null"
-            android:src="@drawable/ic_heart_filled" />
+            android:scaleType="centerCrop"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.Lite.Rounded8" />
 
         <TextView
             android:layout_width="0dp"
@@ -103,7 +106,7 @@
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:contentDescription="@null"
-            android:src="@drawable/ic_arrow_right" />
+            app:srcCompat="@drawable/ic_arrow_right" />
     </LinearLayout>
 
     <LinearLayout
@@ -120,7 +123,7 @@
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:contentDescription="@null"
-            android:src="@drawable/ic_settings" />
+            app:srcCompat="@drawable/ic_settings" />
 
         <TextView
             android:layout_width="0dp"
@@ -135,6 +138,22 @@
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:contentDescription="@null"
-            android:src="@drawable/ic_arrow_right" />
+            app:srcCompat="@drawable/ic_arrow_right" />
     </LinearLayout>
+
+    <!-- 音乐库内容选择：居左放在设置下方，按钮名称即当前展示的内容类型 -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_library_section"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:minHeight="40dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="@string/tab_playlists"
+        app:icon="@drawable/ic_expand"
+        app:iconGravity="textEnd"
+        app:iconPadding="4dp"
+        app:iconTint="?attr/colorOnSecondaryContainer" />
 </LinearLayout>

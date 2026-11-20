@@ -71,8 +71,8 @@
                     android:layout_height="56dp"
                     android:background="@drawable/bg_circle_primary"
                     android:contentDescription="@string/play_all"
-                    android:src="@drawable/ic_play"
-                    android:tint="?attr/colorOnPrimaryContainer" />
+                    app:srcCompat="@drawable/ic_play"
+                    app:tint="?attr/colorOnPrimaryContainer" />
             </LinearLayout>
         </FrameLayout>
     </com.google.android.material.card.MaterialCardView>

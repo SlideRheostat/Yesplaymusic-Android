@@ -46,7 +46,9 @@ object ImageLoader {
     fun load(iv: ImageView, url: String?, targetPx: Int) {
         iv.tag = url
         if (url.isNullOrEmpty()) { iv.setImageDrawable(null); return }
-        val sized = sizedUrl(url, targetPx)
+        // 接口返回的封面常是 http，targetSdk 34 默认禁止明文流量，统一升级为 https
+        val safe = if (url.startsWith("http://")) "https://" + url.substring(7) else url
+        val sized = sizedUrl(safe, targetPx)
 
         val cached = cache.get(sized)
         if (cached != null) { iv.setImageBitmap(cached); return }

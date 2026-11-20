@@ -29,6 +29,10 @@ data class Playlist(
     val subtitle: String? = null,
     var subscribed: Boolean = false,
     val albumCount: Int = 0,
+    /** 本地封面资源；0 表示使用网络封面 */
+    val localCover: Int = 0,
+    /** 是否为本地历史记录歌单 */
+    val history: Boolean = false,
 )
 
 data class LyricLine(val time: Long, val text: String, val trans: String? = null, val roma: String? = null)

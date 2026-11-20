@@ -33,6 +33,12 @@ class SettingsActivity : AppCompatActivity() {
 
         findViewById<ImageButton>(R.id.btn_back).setOnClickListener { finish() }
 
+        // 设置页最底部居右显示当前版本号
+        val version = runCatching {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        }.getOrNull().orEmpty()
+        findViewById<TextView>(R.id.version_label).text = getString(R.string.version_format, version)
+
         bindAccount()
 
         val themeValue = findViewById<TextView>(R.id.theme_value)

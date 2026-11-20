@@ -66,8 +66,8 @@
                             android:layout_height="24dp"
                             android:layout_gravity="center"
                             android:contentDescription="@string/tab_home"
-                            android:src="@drawable/ic_home_outlined"
-                            android:tint="?attr/colorOnSurfaceVariant" />
+                            app:srcCompat="@drawable/ic_home_outlined"
+                            app:tint="?attr/colorOnSurfaceVariant" />
                     </FrameLayout>
                 </com.litemusic.ui.CenteredRippleLayout>
 
@@ -90,8 +90,8 @@
                             android:layout_height="24dp"
                             android:layout_gravity="center"
                             android:contentDescription="@string/tab_search"
-                            android:src="@drawable/ic_search_symbol"
-                            android:tint="?attr/colorOnSurfaceVariant" />
+                            app:srcCompat="@drawable/ic_search_symbol"
+                            app:tint="?attr/colorOnSurfaceVariant" />
                     </FrameLayout>
                 </com.litemusic.ui.CenteredRippleLayout>
 
@@ -114,8 +114,8 @@
                             android:layout_height="24dp"
                             android:layout_gravity="center"
                             android:contentDescription="@string/tab_mine"
-                            android:src="@drawable/ic_account_circle"
-                            android:tint="?attr/colorOnSurfaceVariant" />
+                            app:srcCompat="@drawable/ic_account_circle"
+                            app:tint="?attr/colorOnSurfaceVariant" />
                     </FrameLayout>
                 </com.litemusic.ui.CenteredRippleLayout>
             </LinearLayout>

@@ -1,6 +1,5 @@
 package com.litemusic.ui
 
-import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
@@ -23,7 +22,9 @@ import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.color.MaterialColors
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.litemusic.Api
+import com.litemusic.HistoryStore
 import com.litemusic.ImageLoader
 import com.litemusic.PlayRecordItem
 import com.litemusic.Playlist
@@ -31,8 +32,10 @@ import com.litemusic.Prefs
 import com.litemusic.R
 import com.litemusic.Song
 import com.litemusic.player.PlayerService
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * 我的页。
@@ -60,6 +63,8 @@ class MineFragment : Fragment() {
 
     // ---- 横屏音乐库状态 ----
     private var currentTab = TAB_PLAYLISTS
+    /** 竖屏当前展示的音乐库分类（歌单/专辑/艺人/排行） */
+    private var portraitSection = SECTION_PLAYLIST
     private var rankMode = RANK_WEEK
     private var weekRanks: List<PlayRecordItem> = emptyList()
     private var allRanks: List<PlayRecordItem> = emptyList()
@@ -89,9 +94,24 @@ class MineFragment : Fragment() {
     private var dragProgress = 0f
     private var heroSongsShown: List<Song> = emptyList()
 
-    /** 点击分类时的程序化滚动：期间由独立动画驱动指示条，忽略页面回调，避免闪现 */
-    private var programmaticScroll = false
-    private var indicatorAnimator: ValueAnimator? = null
+    /** 点击分类时的缩放状态；指示条位置完全由页面滚动驱动，与底栏一致 */
+    private var tapAnimating = false
+    private var tapFrom = 0f
+    private var tapTo = 0f
+    /** 点击切页期间抑制途经页的标签点亮，目标标签在动画结束时与指示条同步切换 */
+    private var suppressTabColors = false
+    /** 等待大卡片收起后再触发的目标页；-1 表示没有待处理切页 */
+    private var pendingScrollIndex = -1
+    private var appBarOffset = 0
+    private var appBarRange = 1
+    private var appBarOffsetListener: AppBarLayout.OnOffsetChangedListener? = null
+    /** 分类切换期间（收起卡片 + 页面滚动）暂缓列表刷新，避免动画末尾掉帧 */
+    private var transitionActive = false
+    private var pendingRebuild = false
+    /** 点击切页动画令牌：新的切页或手指拖拽都会使旧动画失效 */
+    private var pageScrollToken = 0
+    private val pageScrollInterpolator =
+        androidx.core.view.animation.PathInterpolatorCompat.create(0.05f, 0.7f, 0.1f, 1f)
 
     /** 横屏卡片网格列数：与首页使用同一套按宽度计算的规则，不再写死 */
     private var landColumns = 2
@@ -120,6 +140,16 @@ class MineFragment : Fragment() {
 
     private fun setupLibrary(view: View) {
         appBar = view.findViewById(R.id.app_bar)
+        // 跟踪大卡片折叠进度：完全收起后再开始页面平滑滚动
+        appBarOffsetListener = AppBarLayout.OnOffsetChangedListener { layout, offset ->
+            appBarOffset = offset
+            appBarRange = layout.totalScrollRange
+            if (pendingScrollIndex >= 0 && layout.totalScrollRange > 0 &&
+                -offset >= layout.totalScrollRange
+            ) {
+                startPendingPageScroll()
+            }
+        }.also { appBar?.addOnOffsetChangedListener(it) }
         likedCard = view.findViewById(R.id.liked_card)
         likedCover = view.findViewById(R.id.liked_cover)
         likedCount = view.findViewById(R.id.liked_count)
@@ -159,11 +189,24 @@ class MineFragment : Fragment() {
                     positionOffsetPixels: Int,
                 ) {
                     dragProgress = position + positionOffset
-                    // 点击切页时指示条由独立动画驱动，忽略页面回调，避免先闪到终点再回跳
-                    if (!programmaticScroll) moveIndicatorByPage(position, positionOffset)
+                    // 指示条与页面滚动完全同步，和底栏一致
+                    moveIndicatorByPage(position, positionOffset)
+                    // 点按切页：前半程放大、后半程恢复
+                    if (tapAnimating && !fakeDragging) {
+                        val span = tapTo - tapFrom
+                        if (span != 0f) {
+                            val progress = ((position + positionOffset) - tapFrom) / span
+                            val p = progress.coerceIn(0f, 1f)
+                            val scale = 1f + 0.12f * sin(PI * p).toFloat()
+                            tabIndicator?.scaleX = scale
+                            tabIndicator?.scaleY = scale
+                        }
+                    }
                 }
 
                 override fun onPageSelected(position: Int) {
+                    // 点击切页动画进行中：途经页不点亮，等动画结束时统一设置目标标签
+                    if (suppressTabColors) return
                     if (currentTab != position) {
                         currentTab = position
                         updateTabColors()
@@ -172,13 +215,7 @@ class MineFragment : Fragment() {
                 }
 
                 override fun onPageScrollStateChanged(state: Int) {
-                    if (state == ViewPager2.SCROLL_STATE_IDLE && programmaticScroll) {
-                        programmaticScroll = false
-                        indicatorAnimator?.cancel()
-                        indicatorAnimator = null
-                        updateTabColors()
-                        moveIndicatorToCenter(currentTab)
-                    }
+                    if (state == ViewPager2.SCROLL_STATE_IDLE) finishTransition()
                 }
             })
         }
@@ -211,33 +248,145 @@ class MineFragment : Fragment() {
         }
     }
 
-    /** 点击分类：指示条从当前位置平滑移动到目标，页面同步切页并收起上方大卡片 */
+    /** 点击分类：先收起上方大卡片，收好后再让页面平滑滚动，指示条完全跟随页面滚动 */
     private fun selectLibraryTab(index: Int, animate: Boolean) {
         if (!isAdded) return
-        if (index == TAB_RANKING && !rankLoaded) loadRanking()
-        val p = pager
-        val currentPage = p?.currentItem ?: currentTab
-        currentTab = index
-        updateTabColors()
-        if (p != null && currentPage != index) {
-            if (animate) {
-                programmaticScroll = true
-                animateIndicatorTo(index)
-            } else {
-                programmaticScroll = false
-                indicatorAnimator?.cancel()
-                indicatorAnimator = null
-                moveIndicatorToCenter(index)
+        // 上一次分类条拖拽若未正常收尾，先退出 fakeDrag，否则后续点击会被吞掉（表现为分类条卡死）
+        pager?.let {
+            if (it.isFakeDragging) {
+                it.endFakeDrag()
+                fakeDragging = false
             }
-            p.setCurrentItem(index, animate)
-        } else {
-            programmaticScroll = false
-            indicatorAnimator?.cancel()
-            indicatorAnimator = null
-            moveIndicatorToCenter(index)
         }
-        // 点击分类：自动上滑略过我喜欢的音乐，让切换条吸顶
-        appBar?.setExpanded(false, true)
+        val p = pager
+        val target = p?.currentItem ?: currentTab
+        // 已经在等待/切换同一目标，不重复触发
+        if (p != null && pendingScrollIndex == index) return
+        if (p != null && tapAnimating && tapTo.toInt() == index) return
+        if (p != null && target != index && animate) {
+            // 切换期间暂缓异步数据刷新，避免排行等内容在动画末尾重建导致卡顿
+            transitionActive = true
+            suppressTabColors = true
+            if (index == TAB_RANKING && !rankLoaded) loadRanking()
+            collapseThenScroll(index, p)
+        } else {
+            if (index == TAB_RANKING && !rankLoaded) loadRanking()
+            suppressTabColors = false
+            currentTab = index
+            updateTabColors()
+            pendingScrollIndex = -1
+            transitionActive = false
+            tapAnimating = false
+            tabIndicator?.animate()?.cancel()
+            tabIndicator?.scaleX = 1f
+            tabIndicator?.scaleY = 1f
+            if (p != null && target != index) p.setCurrentItem(index, false)
+            moveIndicatorToCenter(index)
+            appBar?.setExpanded(false, true)
+            if (pendingRebuild) {
+                pendingRebuild = false
+                rebuildNow()
+            }
+        }
+    }
+
+    /** 先收起大卡片，等折叠完成后再触发页面平滑滚动 */
+    private fun collapseThenScroll(index: Int, p: ViewPager2) {
+        val bar = appBar
+        if (bar == null || appBarRange <= 0 || -appBarOffset >= appBarRange) {
+            startPageScroll(index, p)
+            return
+        }
+        pendingScrollIndex = index
+        bar.setExpanded(false, true)
+        // 兜底：折叠回调未到达完全收起时也能继续切页
+        bar.postDelayed({
+            if (pendingScrollIndex == index) startPendingPageScroll()
+        }, 500)
+    }
+
+    private fun startPendingPageScroll() {
+        val index = pendingScrollIndex
+        if (index < 0) return
+        pendingScrollIndex = -1
+        val p = pager ?: return
+        startPageScroll(index, p)
+    }
+
+    /**
+     * 大卡片已收起，用固定时长的位移动画切页（比 ViewPager2 自带的远距离滚动更快）。
+     * 只驱动分类页自身的滚动，不进入 fakeDrag，也不影响其他界面的动画。
+     */
+    private fun startPageScroll(index: Int, p: ViewPager2) {
+        if (!isAdded || !p.isAttachedToWindow) {
+            suppressTabColors = false
+            return
+        }
+        val rv = p.getChildAt(0) as? RecyclerView ?: run {
+            p.setCurrentItem(index, false)
+            currentTab = index
+            suppressTabColors = false
+            updateTabColors()
+            moveIndicatorToCenter(index)
+            finishTransition()
+            return
+        }
+        if (p.isFakeDragging) p.endFakeDrag()
+        tapFrom = dragProgress
+        tapTo = index.toFloat()
+        tapAnimating = true
+        transitionActive = true
+        val token = ++pageScrollToken
+        val width = rv.width.coerceAtLeast(1)
+        val fromOffset = rv.computeHorizontalScrollOffset()
+        val toOffset = index * width
+        val pages = abs(toOffset - fromOffset).toFloat() / width
+        val duration = (170f + 50f * pages).toLong().coerceIn(200L, 420L)
+        val startTime = SystemClock.uptimeMillis()
+        val runner = object : Runnable {
+            override fun run() {
+                if (token != pageScrollToken || !isAdded || pager !== p ||
+                    !p.isAttachedToWindow
+                ) {
+                    return
+                }
+                val t = ((SystemClock.uptimeMillis() - startTime).toFloat() / duration)
+                    .coerceIn(0f, 1f)
+                val target = fromOffset + (toOffset - fromOffset) *
+                    pageScrollInterpolator.getInterpolation(t)
+                rv.scrollBy((target - rv.computeHorizontalScrollOffset()).toInt(), 0)
+                if (t < 1f) {
+                    p.postOnAnimation(this)
+                } else {
+                    // 位移已到位，同步 ViewPager2 当前页，并让目标标签与指示条同帧落定
+                    p.setCurrentItem(index, false)
+                    currentTab = index
+                    suppressTabColors = false
+                    updateTabColors()
+                    moveIndicatorToCenter(index)
+                    finishTransition()
+                }
+            }
+        }
+        p.postOnAnimation(runner)
+    }
+
+    /** 切换收尾：复位指示条缩放，并补做切换期间积压的列表刷新 */
+    private fun finishTransition() {
+        transitionActive = false
+        if (tapAnimating) {
+            tapAnimating = false
+            tabIndicator?.animate()?.cancel()
+            tabIndicator?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(150)?.start()
+        }
+        if (pendingRebuild) {
+            pendingRebuild = false
+            view?.postDelayed({
+                if (!isAdded) return@postDelayed
+                // 若延迟期间又开始了新的分类切换，继续积压到下一次停稳
+                if (transitionActive) pendingRebuild = true else rebuildNow()
+            }, 180)
+        }
     }
 
     private fun updateTabColors() {
@@ -264,9 +413,8 @@ class MineFragment : Fragment() {
         tabCenters = centers
     }
 
-    /** 根据 ViewPager2 的滚动进度移动指示条，点击切页时由独立动画接管 */
+    /** 根据 ViewPager2 的滚动进度移动指示条，点击与拖拽共用 */
     private fun moveIndicatorByPage(position: Int, offset: Float) {
-        if (programmaticScroll) return
         val indicator = tabIndicator ?: return
         if (tabCenters.size < TAB_COUNT || indicator.width == 0) return
         val from = position.coerceIn(0, TAB_COUNT - 1)
@@ -283,24 +431,6 @@ class MineFragment : Fragment() {
         indicator.translationX = tabCenters[index] - indicator.width / 2f
         indicator.scaleX = 1f
         indicator.scaleY = 1f
-    }
-
-    /** 点击切页时让指示条从当前位置平滑移动到目标，避免页面回调造成的闪现与回跳 */
-    private fun animateIndicatorTo(index: Int) {
-        val indicator = tabIndicator ?: return
-        if (tabCenters.size < TAB_COUNT || indicator.width == 0) {
-            moveIndicatorToCenter(index)
-            return
-        }
-        val target = tabCenters[index] - indicator.width / 2f
-        indicatorAnimator?.cancel()
-        indicator.animate().cancel()
-        indicatorAnimator = ValueAnimator.ofFloat(indicator.translationX, target).apply {
-            duration = 260
-            interpolator = android.view.animation.PathInterpolator(0.05f, 0.7f, 0.1f, 1f)
-            addUpdateListener { indicator.translationX = it.animatedValue as Float }
-            start()
-        }
     }
 
     /**
@@ -328,13 +458,16 @@ class MineFragment : Fragment() {
                     val dy = e.rawY - downY
                     if (!dragging && abs(dx) > slop && abs(dx) > abs(dy)) {
                         val p = pager
+                        // 手指接管：让进行中的点击切页动画立即失效
+                        pageScrollToken++
                         if (p != null && p.beginFakeDrag()) {
                             dragging = true
                             fakeDragging = true
-                            // 拖拽接管时立即停止点击动画，指示条从当前实际位置继续
-                            programmaticScroll = false
-                            indicatorAnimator?.cancel()
-                            indicatorAnimator = null
+                            // 拖拽接管：取消待处理的点击切页，动画期间暂缓列表刷新
+                            tapAnimating = false
+                            suppressTabColors = false
+                            pendingScrollIndex = -1
+                            transitionActive = true
                             dragProgress = p.currentItem.toFloat()
                             lastX = e.rawX
                             tabIndicator?.animate()?.cancel()
@@ -405,7 +538,11 @@ class MineFragment : Fragment() {
         val start = SystemClock.uptimeMillis()
         val freeze = object : Runnable {
             override fun run() {
-                if (!isAdded || pager !== p || !p.isAttachedToWindow) return
+                if (!isAdded || pager !== p || !p.isAttachedToWindow) {
+                    // 兜底退出 fakeDrag，避免停在拖拽状态导致分类条卡死
+                    if (p.isFakeDragging) p.endFakeDrag()
+                    return
+                }
                 if (SystemClock.uptimeMillis() - start < 120) {
                     p.fakeDragBy(0f)
                     p.postDelayed(this, 20)
@@ -477,9 +614,14 @@ class MineFragment : Fragment() {
     // ---------- 数据刷新 ----------
 
     override fun onDestroyView() {
-        indicatorAnimator?.cancel()
-        indicatorAnimator = null
-        programmaticScroll = false
+        appBarOffsetListener?.let { appBar?.removeOnOffsetChangedListener(it) }
+        appBarOffsetListener = null
+        pendingScrollIndex = -1
+        tapAnimating = false
+        suppressTabColors = false
+        transitionActive = false
+        pendingRebuild = false
+        pageScrollToken++
         super.onDestroyView()
     }
 
@@ -493,7 +635,11 @@ class MineFragment : Fragment() {
         rebuild()
         if (Prefs.loggedIn) {
             val load = {
-                if (isLandscape) loadLikedLibrary() else LikedStore.refresh { rebuild() }
+                if (isLandscape) {
+                    loadLikedLibrary()
+                } else {
+                    LikedStore.refresh { rebuild() }
+                }
                 Api.userPlaylist(Prefs.userId) { r ->
                     if (!isAdded) return@userPlaylist
                     r.onSuccess { (id, list) ->
@@ -503,11 +649,15 @@ class MineFragment : Fragment() {
                         playlistsFailed = false
                         rebuild()
                         // 喜欢歌曲详情与完整列表的排序来源保持一致（同一个歌单详情）
-                        if (isLandscape && id > 0 && (changed || likedSongs.isEmpty())) loadLikedLibrary()
+                        if (id > 0 && (changed || likedSongs.isEmpty())) {
+                            if (isLandscape) loadLikedLibrary() else loadLikedFirst(id)
+                        }
                     }.onFailure {
                         playlistsFailed = true
                         rebuild()
-                        if (isLandscape && likedSongs.isEmpty()) loadLikedFallback()
+                        if (likedSongs.isEmpty()) {
+                            if (isLandscape) loadLikedFallback() else loadLikedCover()
+                        }
                     }
                 }
                 Api.albumSublist { r ->
@@ -534,7 +684,8 @@ class MineFragment : Fragment() {
                         rebuild()
                     }
                 }
-                if (isLandscape && currentTab == TAB_RANKING) loadRanking()
+                // 横屏提前预载排行，避免首次点「排行」时数据在切页动画末尾返回造成卡顿
+                if (isLandscape) loadRanking()
             }
             // userId 缺失（老版本遗留）时先拉账号信息自愈，否则歌单/红心接口拿不到数据
             if (Prefs.userId == 0L) Api.account { load() } else load()
@@ -552,6 +703,53 @@ class MineFragment : Fragment() {
             albumsFailed = false
             playlistsFailed = false
             artistsFailed = false
+        }
+    }
+
+    /**
+     * 竖屏首曲封面：与点进「我喜欢的音乐」时使用同一份歌单详情，
+     * 只保留第一首，确保封面与该歌单第一首歌完全一致。
+     */
+    private fun loadLikedFirst(playlistId: Long) {
+        if (!isAdded || likedLoading) return
+        likedLoading = true
+        Api.playlistDetail(playlistId) { r ->
+            likedLoading = false
+            if (!isAdded) return@playlistDetail
+            val first = r.getOrNull()?.second?.firstOrNull()
+            if (first != null) {
+                likedSongs = listOf(first)
+                rebuild()
+            } else {
+                loadLikedCover()
+            }
+        }
+    }
+
+    /**
+     * 竖屏喜欢歌曲详情拉取失败时的兜底：取 likelist 第一首详情。
+     */
+    private fun loadLikedCover() {
+        if (!isAdded || likedLoading) return
+        likedLoading = true
+        Api.likelist { r ->
+            likedLoading = false
+            if (!isAdded) return@likelist
+            val first = r.getOrNull()?.firstOrNull()
+            if (first == null) {
+                if (likedSongs.isNotEmpty()) {
+                    likedSongs = emptyList()
+                    rebuild()
+                }
+                return@likelist
+            }
+            if (likedSongs.firstOrNull()?.id == first && likedSongs.firstOrNull()?.cover != null) return@likelist
+            Api.songDetail(listOf(first)) { r2 ->
+                if (!isAdded) return@songDetail
+                val song = r2.getOrNull()?.firstOrNull() ?: return@songDetail
+                likedSongs = listOf(song)
+                rebuild()
+            }
         }
     }
 
@@ -636,6 +834,16 @@ class MineFragment : Fragment() {
     private fun rebuild() {
         // 异步回调可能在 Fragment 已 detach 后到达，此时 getString 会抛 IllegalStateException
         if (!isAdded) return
+        // 分类切换动画期间先积压，等页面停稳后再刷新，避免动画末尾掉帧
+        if (transitionActive) {
+            pendingRebuild = true
+            return
+        }
+        rebuildNow()
+    }
+
+    private fun rebuildNow() {
+        if (!isAdded) return
         if (isLandscape) {
             bindLandscapeHeader()
             bindLandscapeHero()
@@ -652,46 +860,44 @@ class MineFragment : Fragment() {
     // 行模型：type 0=头部 1=分区标题 2=条目 3=提示 4=排行筛选 5=排行行
     private var rows: List<Row> = emptyList()
 
-    /** 竖屏：原有分区式列表 */
+    /** 竖屏：头部 + 当前选择的音乐库分类内容 */
     private fun buildRows(): List<Row> {
         val rows = ArrayList<Row>()
         rows.add(Row(TYPE_HEADER))
-        if (playlists.isNotEmpty() || Prefs.loggedIn) {
-            rows.add(Row(TYPE_SECTION, getString(R.string.my_playlists), section = SECTION_PLAYLIST))
-            if (playlistsExpanded) {
-                for (p in playlists) rows.add(Row(TYPE_ITEM, item = p))
+        when (portraitSection) {
+            SECTION_PLAYLIST -> {
+                for (p in playlists) rows.add(Row(TYPE_ITEM, item = p, section = SECTION_PLAYLIST))
                 if (playlists.isEmpty()) {
                     rows.add(Row(TYPE_HINT, title = if (playlistsFailed) getString(R.string.load_failed) else getString(R.string.no_playlists)))
                 }
+                // 历史记录固定放在歌单最后
+                rows.add(Row(TYPE_ITEM, item = HistoryStore.playlist(requireContext()), section = SECTION_PLAYLIST))
             }
-        }
-        if (albums.isNotEmpty() || Prefs.loggedIn) {
-            rows.add(Row(TYPE_SECTION, getString(R.string.my_albums), section = SECTION_ALBUM))
-            if (albumsExpanded) {
-                for (a in albums) rows.add(Row(TYPE_ITEM, item = a))
+            SECTION_ALBUM -> {
+                for (a in albums) rows.add(Row(TYPE_ITEM, item = a, section = SECTION_ALBUM))
                 if (albums.isEmpty()) {
                     rows.add(Row(TYPE_HINT, title = if (albumsFailed) (albumsError ?: getString(R.string.load_failed)) else getString(R.string.no_albums)))
                 }
             }
-        }
-        if (artists.isNotEmpty() || Prefs.loggedIn) {
-            rows.add(Row(TYPE_SECTION, getString(R.string.followed_artists), section = SECTION_ARTIST))
-            if (artistsExpanded) {
+            SECTION_ARTIST -> {
                 for (a in artists) rows.add(Row(TYPE_ITEM, item = a, section = SECTION_ARTIST))
                 if (artists.isEmpty()) {
                     rows.add(Row(TYPE_HINT, title = if (artistsFailed) getString(R.string.load_failed) else getString(R.string.no_followed_artists)))
                 }
             }
+            else -> rows.addAll(buildRankRows())
         }
         return rows
     }
 
     private fun buildPlaylistRows(): List<Row> {
-        val rows = ArrayList<Row>(playlists.size + 1)
+        val rows = ArrayList<Row>(playlists.size + 2)
         for (p in playlists) rows.add(Row(TYPE_ITEM, item = p, section = SECTION_PLAYLIST))
         if (rows.isEmpty()) {
             rows.add(Row(TYPE_HINT, title = if (playlistsFailed) getString(R.string.load_failed) else getString(R.string.no_playlists)))
         }
+        // 历史记录固定放在歌单最后
+        rows.add(Row(TYPE_ITEM, item = HistoryStore.playlist(requireContext()), section = SECTION_PLAYLIST))
         return rows
     }
 
@@ -834,6 +1040,8 @@ class MineFragment : Fragment() {
                 TYPE_HEADER -> HeaderVH(inf.inflate(R.layout.item_mine_header, parent, false))
                 TYPE_SECTION -> SectionVH(inf.inflate(R.layout.item_section_header, parent, false))
                 TYPE_HINT -> HintVH(inf.inflate(R.layout.item_hint, parent, false) as TextView)
+                TYPE_RANK_FILTER -> RankFilterVH(inf.inflate(R.layout.item_rank_filter, parent, false))
+                TYPE_RANK -> RankVH(inf.inflate(R.layout.item_rank, parent, false))
                 else -> RowVH(inf.inflate(R.layout.item_song, parent, false))
             }
         }
@@ -847,6 +1055,8 @@ class MineFragment : Fragment() {
                     h.text.text = row.title
                     h.text.setOnClickListener { refresh() }
                 }
+                is RankFilterVH -> bindRankFilter(h)
+                is RankVH -> bindRankRow(h, row)
                 is RowVH -> bindItem(h, row)
             }
         }
@@ -869,10 +1079,54 @@ class MineFragment : Fragment() {
         }
         h.favoritesRow.visibility = if (loggedIn) View.VISIBLE else View.GONE
         h.favCount.text = if (loggedIn) "${LikedStore.size()}" else ""
+        // 用第一首喜欢歌曲的封面替代原来的心形符号
+        val favCover = if (loggedIn) likedSongs.firstOrNull()?.cover else null
+        if (favCover != null) ImageLoader.load(h.favCover, favCover, 120)
+        else h.favCover.setImageDrawable(null)
         h.favoritesRow.setOnClickListener {
             if (loggedIn) openLiked() else startActivity(Intent(requireContext(), LoginActivity::class.java))
         }
         h.settingsRow.setOnClickListener { startActivity(Intent(requireContext(), SettingsActivity::class.java)) }
+        h.sectionButton.text = sectionLabel(portraitSection)
+        h.sectionButton.setOnClickListener { showSectionDialog() }
+    }
+
+    /** 竖屏音乐库分类名称，与横屏分类条保持一致 */
+    private fun sectionLabel(section: Int): String = when (section) {
+        SECTION_ALBUM -> getString(R.string.tab_albums)
+        SECTION_ARTIST -> getString(R.string.tab_artists)
+        SECTION_RANKING -> getString(R.string.listen_ranking)
+        else -> getString(R.string.tab_playlists)
+    }
+
+    /** 竖屏：弹窗选择当前展示的音乐库内容 */
+    private fun showSectionDialog() {
+        val labels = arrayOf(
+            getString(R.string.tab_playlists),
+            getString(R.string.tab_albums),
+            getString(R.string.tab_artists),
+            getString(R.string.listen_ranking),
+        )
+        val checked = when (portraitSection) {
+            SECTION_ALBUM -> 1
+            SECTION_ARTIST -> 2
+            SECTION_RANKING -> 3
+            else -> 0
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.my_library)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                dialog.dismiss()
+                portraitSection = when (which) {
+                    1 -> SECTION_ALBUM
+                    2 -> SECTION_ARTIST
+                    3 -> SECTION_RANKING
+                    else -> SECTION_PLAYLIST
+                }
+                if (portraitSection == SECTION_RANKING && !rankLoaded) loadRanking()
+                rebuild()
+            }
+            .show()
     }
 
     private fun openLiked() {
@@ -906,7 +1160,7 @@ class MineFragment : Fragment() {
         h.chevron.animate()
             .rotation(if (expanded) 0f else -90f)
             .setDuration(250)
-            .setInterpolator(android.view.animation.PathInterpolator(0.05f, 0.7f, 0.1f, 1f))
+            .setInterpolator(androidx.core.view.animation.PathInterpolatorCompat.create(0.05f, 0.7f, 0.1f, 1f))
             .start()
         h.root.setOnClickListener {
             when (row.section) {
@@ -923,7 +1177,9 @@ class MineFragment : Fragment() {
     private fun bindItem(h: RowVH, row: Row) {
         val p = row.item!!
         h.name.text = p.name
-        if (row.section == SECTION_ARTIST) {
+        if (p.history) {
+            h.artist.text = getString(R.string.track_count, p.trackCount)
+        } else if (row.section == SECTION_ARTIST) {
             h.artist.text = if (p.albumCount > 0) getString(R.string.album_count, p.albumCount)
             else getString(R.string.artist)
         } else if (p.subtitle != null) {
@@ -931,10 +1187,14 @@ class MineFragment : Fragment() {
         } else {
             h.artist.text = getString(R.string.playlist_meta, p.trackCount, HomeFragment.formatCount(p.playCount))
         }
-        ImageLoader.load(h.cover, p.cover, 120)
+        loadPlaylistCover(h.cover, p, 120)
         h.like.visibility = View.GONE
         h.itemView.setOnClickListener {
             val ctx = requireContext()
+            if (p.history) {
+                startActivity(HistoryActivity.launch(ctx))
+                return@setOnClickListener
+            }
             when (row.section) {
                 SECTION_ARTIST -> startActivity(ArtistActivity.launch(ctx, p.id, p.name))
                 else -> startActivity(if (p.subtitle != null) PlaylistActivity.album(ctx, p.id, p.name)
@@ -943,21 +1203,36 @@ class MineFragment : Fragment() {
         }
     }
 
+    /** 本地封面（历史记录）直接显示资源，网络封面走图片缓存 */
+    private fun loadPlaylistCover(iv: ImageView, p: Playlist, size: Int) {
+        if (p.localCover != 0) {
+            iv.setImageResource(p.localCover)
+            iv.scaleType = ImageView.ScaleType.CENTER_CROP
+        } else {
+            ImageLoader.load(iv, p.cover, size)
+        }
+    }
+
     // ---------- 横屏卡片网格 ----------
 
     private fun bindCollectionCard(h: CollectionCardVH, row: Row) {
         val p = row.item ?: return
         h.name.text = p.name
-        val badge = when (row.section) {
-            SECTION_ARTIST -> if (p.albumCount > 0) getString(R.string.album_count, p.albumCount) else ""
-            SECTION_ALBUM -> if (p.trackCount > 0) getString(R.string.track_count, p.trackCount) else ""
+        val badge = when {
+            p.history -> getString(R.string.track_count, p.trackCount)
+            row.section == SECTION_ARTIST -> if (p.albumCount > 0) getString(R.string.album_count, p.albumCount) else ""
+            row.section == SECTION_ALBUM -> if (p.trackCount > 0) getString(R.string.track_count, p.trackCount) else ""
             else -> if (p.playCount > 0) HomeFragment.formatCount(p.playCount) else ""
         }
         h.count.text = badge
         h.count.visibility = if (badge.isEmpty()) View.GONE else View.VISIBLE
-        ImageLoader.load(h.cover, p.cover, 300)
+        loadPlaylistCover(h.cover, p, 300)
         h.itemView.setOnClickListener {
             val ctx = requireContext()
+            if (p.history) {
+                startActivity(HistoryActivity.launch(ctx))
+                return@setOnClickListener
+            }
             when (row.section) {
                 SECTION_ARTIST -> startActivity(ArtistActivity.launch(ctx, p.id, p.name))
                 SECTION_ALBUM -> startActivity(PlaylistActivity.album(ctx, p.id, p.name))
@@ -1008,8 +1283,10 @@ class MineFragment : Fragment() {
         val sub: TextView = v.findViewById(R.id.sub)
         val action: MaterialButton = v.findViewById(R.id.btn_action)
         val favoritesRow: LinearLayout = v.findViewById(R.id.row_favorites)
+        val favCover: ImageView = v.findViewById(R.id.fav_cover)
         val favCount: TextView = v.findViewById(R.id.fav_count)
         val settingsRow: View = v.findViewById(R.id.row_settings)
+        val sectionButton: MaterialButton = v.findViewById(R.id.btn_library_section)
     }
 
     private class CollectionCardVH(v: View) : RecyclerView.ViewHolder(v) {

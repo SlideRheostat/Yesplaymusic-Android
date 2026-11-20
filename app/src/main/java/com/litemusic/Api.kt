@@ -21,8 +21,18 @@ object Api {
     /** 歌单广场（官方 top_playlist，eapi 真分页）：下拉刷新靠它按 offset 取"下一页"新内容。
      *  回传 (本页列表, 是否还有更多) */
     fun playlistSquare(limit: Int, offset: Int, cb: (Result<Pair<List<Playlist>, Boolean>>) -> Unit) {
+        playlistByCat("全部", limit, offset, cb)
+    }
+
+    /** 歌单广场按分类取（cat：全部 / 官方 / 欧美 / 流行 / 摇滚 / 电子 / 说唱 / ACG …） */
+    fun playlistByCat(
+        cat: String,
+        limit: Int,
+        offset: Int,
+        cb: (Result<Pair<List<Playlist>, Boolean>>) -> Unit,
+    ) {
         val d = JSONObject()
-        d.put("cat", "全部")
+        d.put("cat", cat)
         d.put("order", "hot")
         d.put("limit", limit)
         d.put("offset", offset)
@@ -32,6 +42,20 @@ object Api {
                 val list = json.optJSONArray("playlists")?.let { Parser.playlists(it) } ?: emptyList()
                 list to json.optBoolean("more", false)
             })
+        }
+    }
+
+    /** 官方排行榜榜单列表 */
+    fun toplists(cb: (Result<List<Playlist>>) -> Unit) {
+        ApiClient.get("toplist", JSONObject()) { r ->
+            cb(r.map { it.optJSONArray("list")?.let { a -> Parser.playlists(a) } ?: emptyList() })
+        }
+    }
+
+    /** 私人FM：eapi 通道用 radio/get（personal_fm 在 eapi 下不存在），一次返回一批歌曲作为播放队列 */
+    fun personalFm(cb: (Result<List<Song>>) -> Unit) {
+        ApiClient.get("radio/get", JSONObject()) { r ->
+            cb(r.map { Parser.songs(it.optJSONArray("data")) })
         }
     }
 

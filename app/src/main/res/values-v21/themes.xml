@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 21-22：系统栏图标恒为白色，用品牌红底/灰底保证可读 -->
+    <style name="Theme.LiteMusic" parent="Theme.LiteMusic.Base">
+        <item name="android:statusBarColor">@color/md_primary</item>
+        <item name="android:navigationBarColor">@color/sys_nav_gray</item>
+    </style>
+
+    <!-- 播放页：系统栏取主题表面色 -->
+    <style name="Theme.LiteMusic.Player" parent="Theme.LiteMusic.Base">
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:navigationBarColor">?attr/colorSurface</item>
+    </style>
+</resources>

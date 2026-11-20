@@ -8,23 +8,42 @@
 
     <string name="daily_recommend">每日推荐</string>
     <string name="recommend_playlists">推荐歌单</string>
+    <!-- 首页头部的每日推荐大字：两行两列竖排 -->
+    <string name="daily_recommend_folded">每 日\n推 荐</string>
+    <string name="personal_fm">私人FM</string>
+    <string name="fm_dislike">不喜欢</string>
+    <!-- 发现分类 -->
+    <string name="discover">发现</string>
+    <string name="cat_all">全部</string>
+    <string name="cat_recommend">推荐歌单</string>
+    <string name="cat_high_quality">精品歌单</string>
+    <string name="cat_official">官方</string>
+    <string name="cat_toplists">排行榜</string>
+    <string name="cat_western">欧美</string>
+    <string name="cat_pop">流行</string>
+    <string name="cat_rock">摇滚</string>
+    <string name="cat_electronic">电子</string>
+    <string name="cat_rap">说唱</string>
+    <string name="cat_acg">ACG</string>
     <string name="my_favorites">我喜欢的音乐</string>
     <string name="my_library">我的音乐库</string>
     <string name="tab_playlists">歌单</string>
     <string name="tab_albums">专辑</string>
     <string name="tab_artists">艺人</string>
-    <string name="listen_ranking">听歌排行</string>
+    <string name="listen_ranking">排行</string>
     <string name="rank_week">最近一周</string>
     <string name="rank_all">所有时间</string>
     <string name="no_play_record">暂无听歌记录</string>
     <string name="play_count_times">%1$d 次</string>
-    <string name="my_playlists">我的歌单</string>
-    <string name="my_albums">我的专辑</string>
-    <string name="followed_artists">关注艺人</string>
+    <string name="my_playlists">歌单</string>
+    <string name="my_albums">专辑</string>
+    <string name="followed_artists">艺人</string>
     <string name="load_failed">加载失败，点击重试</string>
     <string name="no_playlists">暂无创建或收藏的歌单</string>
     <string name="no_albums">暂无收藏的专辑</string>
     <string name="no_followed_artists">暂无关注的艺人</string>
+    <string name="history_playlist">历史记录</string>
+    <string name="history_empty">暂无历史记录，播放歌曲后会出现在这里</string>
     <string name="login">登录</string>
     <string name="logout">退出登录</string>
     <string name="login_tip">登录后享受完整曲库</string>
@@ -37,6 +56,7 @@
 
     <string name="search_hint">搜索</string>
     <string name="search_empty">输入关键词搜索歌曲</string>
+    <string name="search_history">搜索历史</string>
 
     <string name="play_all">播放全部</string>
     <string name="lyric">歌词</string>
@@ -63,7 +83,10 @@
     <string name="cache_limit_invalid">请输入有效的体积</string>
     <string name="cache_limit_unit">MB</string>
     <string name="lyric_size">歌词字号</string>
-    <string name="cached_songs">已缓存的歌</string>
+    <string name="cached_songs">已缓存的歌曲</string>
+    <string name="version_format">版本 %1$s</string>
+    <string name="search_history_removed">已删除该搜索记录</string>
+    <string name="cache_removed">已删除该歌曲缓存</string>
     <string name="clear_cache">清除歌曲缓存</string>
     <string name="clear_cache_confirm">将删除全部已缓存的歌曲，正在播放的歌曲会保留。是否继续？</string>
     <string name="clear_cache_done">已清除歌曲缓存</string>

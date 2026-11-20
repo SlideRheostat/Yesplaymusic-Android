@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 限定在按钮范围内的圆形涟漪：不会超出 48dp 点击区域，也不会被父布局截断 -->
-<ripple xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="?attr/colorControlHighlight">
-
-    <item android:id="@android:id/mask">
+<!-- API 19 无 Ripple：用圆形按压高亮近似，保持相同的圆形点击反馈 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
         <shape android:shape="oval">
-            <solid android:color="#FFFFFFFF" />
+            <solid android:color="#33808080" />
         </shape>
     </item>
-</ripple>
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+</selector>

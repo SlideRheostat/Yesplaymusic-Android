@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- M3 Fade through（退出）：透明度 1→0，同时轻微缩小 -->
 <set xmlns:android="http://schemas.android.com/apk/res/android"
-    android:interpolator="@android:interpolator/fast_out_linear_in"
+    android:interpolator="@android:interpolator/decelerate_quad"
     android:shareInterpolator="true">
 
     <alpha

@@ -16,7 +16,7 @@
         android:layout_height="48dp"
         android:contentDescription="@null"
         android:scaleType="centerCrop"
-        android:src="@drawable/ic_music_note"
+        app:srcCompat="@drawable/ic_music_note"
         app:shapeAppearanceOverlay="@style/ShapeAppearance.Lite.Rounded8" />
 
     <LinearLayout
@@ -45,11 +45,21 @@
             android:textColor="?attr/colorOnSurfaceVariant" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/size"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingStart="8dp"
+        android:paddingEnd="4dp"
+        android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone" />
+
     <ImageButton
         android:id="@+id/btn_like"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="@null"
-        android:src="@drawable/ic_heart" />
+        app:srcCompat="@drawable/ic_heart" />
 </LinearLayout>

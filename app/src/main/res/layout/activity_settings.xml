@@ -21,7 +21,7 @@
             android:layout_height="48dp"
             android:background="@drawable/bg_circle_ripple"
             android:contentDescription="@null"
-            android:src="@drawable/ic_back" />
+            app:srcCompat="@drawable/ic_back" />
 
         <TextView
             android:layout_width="0dp"
@@ -71,7 +71,7 @@
                         android:layout_height="56dp"
                         android:contentDescription="@null"
                         android:scaleType="centerCrop"
-                        android:src="@drawable/ic_person"
+                        app:srcCompat="@drawable/ic_person"
                         app:shapeAppearanceOverlay="@style/ShapeAppearance.Lite.Circle" />
 
                     <LinearLayout
@@ -123,7 +123,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_palette" />
+                    app:srcCompat="@drawable/ic_palette" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -157,8 +157,8 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_music_note"
-                    android:tint="?attr/colorOnSurfaceVariant" />
+                    app:srcCompat="@drawable/ic_music_note"
+                    app:tint="?attr/colorOnSurfaceVariant" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -192,7 +192,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_format_size" />
+                    app:srcCompat="@drawable/ic_format_size" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -226,7 +226,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_storage" />
+                    app:srcCompat="@drawable/ic_storage" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -260,7 +260,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_download" />
+                    app:srcCompat="@drawable/ic_download" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -283,7 +283,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_arrow_right" />
+                    app:srcCompat="@drawable/ic_arrow_right" />
             </LinearLayout>
 
             <LinearLayout
@@ -301,7 +301,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_delete" />
+                    app:srcCompat="@drawable/ic_delete" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -328,7 +328,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_screen" />
+                    app:srcCompat="@drawable/ic_screen" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -362,7 +362,7 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_fullscreen" />
+                    app:srcCompat="@drawable/ic_fullscreen" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -380,6 +380,19 @@
                     android:clickable="false"
                     android:focusable="false" />
             </LinearLayout>
+
+            <!-- 当前版本号：居右小字 -->
+            <TextView
+                android:id="@+id/version_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="24dp"
+                android:gravity="end"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

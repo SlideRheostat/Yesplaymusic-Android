@@ -13,11 +13,16 @@ import com.litemusic.ImageLoader
 import com.litemusic.Prefs
 import com.litemusic.R
 import com.litemusic.Song
+import java.util.Locale
 
 /** 通用歌曲列表适配器（搜索/歌单/收藏/缓存列表共用） */
 class SongAdapter(
     private val songs: List<Song>,
     private val showLike: Boolean = true,
+    /** 传入歌曲 id → 缓存字节数后，行尾显示该歌曲占用的缓存大小 */
+    private val sizes: Map<Long, Long> = emptyMap(),
+    /** 长按缓存大小（即右侧尺寸文字）时回调，用于精准删除该歌曲缓存 */
+    private val onSizeLongClick: ((Song) -> Unit)? = null,
     private val onClick: (Int) -> Unit,
 ) : RecyclerView.Adapter<SongAdapter.VH>() {
 
@@ -25,6 +30,7 @@ class SongAdapter(
         val cover: ImageView = v.findViewById(R.id.cover)
         val name: TextView = v.findViewById(R.id.name)
         val artist: TextView = v.findViewById(R.id.artist)
+        val size: TextView = v.findViewById(R.id.size)
         val like: ImageButton = v.findViewById(R.id.btn_like)
     }
 
@@ -65,6 +71,19 @@ class SongAdapter(
             h.artist.text = "${song.artists} - ${song.album}"
         }
         ImageLoader.load(h.cover, song.cover, 120)
+        // 缓存列表：行尾显示该歌曲占用的体积，长按可精准删除
+        val bytes = sizes[song.id] ?: 0L
+        if (bytes > 0) {
+            h.size.visibility = View.VISIBLE
+            h.size.text = formatSize(bytes)
+            h.size.setOnLongClickListener {
+                onSizeLongClick?.invoke(song)
+                true
+            }
+        } else {
+            h.size.visibility = View.GONE
+            h.size.setOnLongClickListener(null)
+        }
         h.itemView.setOnClickListener {
             val p = h.bindingAdapterPosition
             if (p != RecyclerView.NO_POSITION) onClick(p)
@@ -101,6 +120,18 @@ class SongAdapter(
                 } else {
                     Toast.makeText(h.itemView.context, r.exceptionOrNull()?.message, Toast.LENGTH_SHORT).show()
                 }
+            }
+        }
+    }
+
+    companion object {
+        /** 缓存体积：KB / MB / GB 自适应 */
+        fun formatSize(bytes: Long): String {
+            val kb = bytes / 1024.0
+            return when {
+                kb >= 1024 * 1024 -> String.format(Locale.US, "%.1f GB", kb / 1024 / 1024)
+                kb >= 1024 -> String.format(Locale.US, "%.1f MB", kb / 1024)
+                else -> String.format(Locale.US, "%.0f KB", kb)
             }
         }
     }

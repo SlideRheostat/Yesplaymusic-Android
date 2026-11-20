@@ -52,9 +52,22 @@
             android:name=".ui.CachedSongsActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".ui.HistoryActivity"
+            android:exported="false" />
+
         <service
             android:name=".player.PlayerService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <!-- API 19/20 的耳机/蓝牙媒体按键（21+ 由 MediaSession 处理） -->
+        <receiver
+            android:name=".player.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

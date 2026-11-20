@@ -1,7 +1,6 @@
 package com.litemusic.player
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -19,6 +18,7 @@ import android.os.Looper
 import android.widget.Toast
 import com.litemusic.Api
 import com.litemusic.AudioCache
+import com.litemusic.HistoryStore
 import com.litemusic.ImageLoader
 import com.litemusic.Prefs
 import com.litemusic.R
@@ -39,6 +39,7 @@ class PlayerService : Service() {
 
     companion object {
         const val ACTION_PLAY = "litemusic.PLAY"
+        const val ACTION_RESUME = "litemusic.RESUME"
         const val ACTION_PAUSE = "litemusic.PAUSE"
         const val ACTION_PREV = "litemusic.PREV"
         const val ACTION_NEXT = "litemusic.NEXT"
@@ -53,7 +54,7 @@ class PlayerService : Service() {
         fun ensureStarted(ctx: Context) {
             val i = Intent(ctx, PlayerService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ctx.startForegroundService(i)
+                PlayerCompat26.startForegroundService(ctx, i)
             } else {
                 ctx.startService(i)
             }
@@ -135,6 +136,12 @@ class PlayerService : Service() {
     private var preferCached = false
 
     /**
+     * 随机播放的“已播放顺序”栈：每次随机下一首前压入当前索引，
+     * 上一首时按栈回溯，保证随机模式下仍能严格按实际播放顺序返回。
+     */
+    private val shuffleHistory = ArrayList<Int>()
+
+    /**
      * 连续播放失败计数。达到队列长度后停止跳歌，
      * 防止整队不可播（VIP/无版权/接口异常）时后台无限循环请求、跑掉巨额流量。
      * 任一首成功开播即清零。
@@ -167,6 +174,7 @@ class PlayerService : Service() {
         initMediaSession()
         startForegroundCompat(buildNotification())
         registerNoisy()
+        registerMediaButtons()
         pending?.let {
             pending = null
             setQueue(it.first, it.second, pendingCached)
@@ -177,6 +185,7 @@ class PlayerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_PLAY -> togglePlay()
+            ACTION_RESUME -> compatPlay()
             ACTION_PAUSE -> pause()
             ACTION_PREV -> prev()
             ACTION_NEXT -> next()
@@ -192,6 +201,7 @@ class PlayerService : Service() {
         scrobbleCurrent(completed = false)
         handler.removeCallbacks(ticker)
         try { unregisterReceiver(noisyReceiver) } catch (_: Exception) {}
+        unregisterMediaButtons()
         mp?.release()
         mp = null
         try { abandonAudioFocus() } catch (_: Exception) {}
@@ -210,9 +220,17 @@ class PlayerService : Service() {
         if (songs.isEmpty()) return
         // 新队列替换当前播放前，先结算上一首的播放记录
         scrobbleCurrent(completed = false)
+        val sameQueue = songs === queue
+        val previousIndex = index
         queue = songs
         preferCached = cached
         consecutiveFailures = 0
+        // 随机模式下，同一队列内手动点歌也要记录上一首；换队列则无法映射旧索引
+        if (mode == MODE_SHUFFLE && sameQueue && previousIndex in songs.indices) {
+            shuffleHistory.add(previousIndex)
+        } else if (!sameQueue) {
+            shuffleHistory.clear()
+        }
         val i = startIndex.coerceIn(0, songs.size - 1)
         index = i
         playCurrent()
@@ -268,7 +286,11 @@ class PlayerService : Service() {
         if (queue.isEmpty()) return
         scrobbleCurrent(completed = false)
         index = when (mode) {
-            MODE_SHUFFLE -> randomIndex()
+            MODE_SHUFFLE -> {
+                // 记录实际播放顺序，供上一首回溯
+                shuffleHistory.add(index)
+                randomIndex()
+            }
             else -> (index + 1) % queue.size
         }
         playCurrent()
@@ -277,9 +299,19 @@ class PlayerService : Service() {
     fun prev() {
         if (queue.isEmpty()) return
         scrobbleCurrent(completed = false)
-        index = when (mode) {
-            MODE_SHUFFLE -> randomIndex()
-            else -> if (index - 1 < 0) queue.size - 1 else index - 1
+        index = if (mode == MODE_SHUFFLE) {
+            // 随机模式：严格按实际播放顺序回溯；没有历史时退回队列上一首
+            var previous = -1
+            while (shuffleHistory.isNotEmpty()) {
+                val candidate = shuffleHistory.removeAt(shuffleHistory.size - 1)
+                if (candidate in queue.indices) {
+                    previous = candidate
+                    break
+                }
+            }
+            if (previous >= 0) previous else if (index - 1 < 0) queue.size - 1 else index - 1
+        } else {
+            if (index - 1 < 0) queue.size - 1 else index - 1
         }
         playCurrent()
     }
@@ -287,6 +319,7 @@ class PlayerService : Service() {
     fun cycleMode(): Int {
         mode = (mode + 1) % 3
         Prefs.playMode = mode
+        shuffleHistory.clear()
         return mode
     }
 
@@ -321,6 +354,11 @@ class PlayerService : Service() {
             if (bmp != null && currentSong?.id == song.id) {
                 sessionArt = bmp
                 updateSessionMeta()
+                // API 19/20 没有 MediaStyle 的异步封面，重建通知以显示大图
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+                    lastNotifPlaying = null
+                    updateNotif()
+                }
             }
         }
 
@@ -406,6 +444,8 @@ class PlayerService : Service() {
                     return@setOnPreparedListener
                 }
                 it.start()
+                // 进入本地历史记录（最近 50 首不重复）
+                currentSong?.let { song -> HistoryStore.record(song) }
                 duration = it.duration
                 lastPosition = 0
                 playing = true
@@ -477,15 +517,15 @@ class PlayerService : Service() {
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel("playback", getString(R.string.notification_channel_playback), NotificationManager.IMPORTANCE_LOW)
-            ch.setShowBadge(false)
-            nm.createNotificationChannel(ch)
+            PlayerCompat26.createPlaybackChannel(
+                this, nm, getString(R.string.notification_channel_playback)
+            )
         }
     }
 
     private fun startForegroundCompat(n: Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            PlayerCompat29.startForegroundMedia(this, 1, n)
         } else {
             startForeground(1, n)
         }
@@ -507,10 +547,13 @@ class PlayerService : Service() {
     /** 基础通知（API 1 可用字段）；21+ 的 MediaStyle/按钮由 PlayerCompat21 追加 */
     internal fun compatBaseBuilder(): Notification.Builder {
         val b = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            Notification.Builder(this, "playback")
+            PlayerCompat26.baseBuilder(this)
         else
             @Suppress("DEPRECATION") Notification.Builder(this)
-        b.setSmallIcon(R.drawable.ic_music_note)
+        b.setSmallIcon(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) R.drawable.ic_music_note
+            else R.drawable.ic_stat_music
+        )
             .setContentIntent(contentIntent())
             .setOngoing(true)
         return b
@@ -523,8 +566,32 @@ class PlayerService : Service() {
             .setContentText(song?.let { "${it.artists} - ${it.album}" } ?: getString(R.string.notification_open_tip))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             PlayerCompat21.decorate(this, session21, builder)
+        } else {
+            // API 19/20 无 MediaStyle：用基础通知 + 三个操作按钮保持可控性
+            sessionArt?.let { builder.setLargeIcon(it) }
+            addLegacyActions(builder)
         }
         return builder.build()
+    }
+
+    /** API 19/20 通知栏操作按钮（系统媒体图标，均为系统自带位图） */
+    @Suppress("DEPRECATION")
+    private fun addLegacyActions(b: Notification.Builder) {
+        b.addAction(
+            android.R.drawable.ic_media_previous,
+            getString(R.string.notif_prev),
+            pi(ACTION_PREV)
+        )
+        b.addAction(
+            if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+            getString(if (playing) R.string.notif_pause else R.string.notif_play),
+            pi(ACTION_PLAY)
+        )
+        b.addAction(
+            android.R.drawable.ic_media_next,
+            getString(R.string.notif_next),
+            pi(ACTION_NEXT)
+        )
     }
 
     private fun updateNotif(large: Bitmap? = null) {
@@ -595,5 +662,28 @@ class PlayerService : Service() {
         try {
             registerReceiver(noisyReceiver, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
         } catch (_: Exception) {}
+    }
+
+    // ---- API 19/20 媒体按键（无 MediaSession，改用系统媒体按键广播） ----
+    private var mediaButtonPending: PendingIntent? = null
+
+    @Suppress("DEPRECATION")
+    private fun registerMediaButtons() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) return
+        try {
+            val intent = Intent(this, MediaButtonReceiver::class.java)
+                .setAction(Intent.ACTION_MEDIA_BUTTON)
+            val pi = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT)
+            mediaButtonPending = pi
+            audio.registerMediaButtonEventReceiver(pi)
+        } catch (_: Exception) {
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun unregisterMediaButtons() {
+        val pi = mediaButtonPending ?: return
+        mediaButtonPending = null
+        try { audio.unregisterMediaButtonEventReceiver(pi) } catch (_: Exception) {}
     }
 }

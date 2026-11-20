@@ -47,11 +47,8 @@
         <item name="android:activityCloseExitAnimation">@anim/m3_fade_through_out</item>
     </style>
 
-    <!-- API 21-22：系统栏图标恒为白色，用品牌红底/灰底保证可读 -->
-    <style name="Theme.LiteMusic" parent="Theme.LiteMusic.Base">
-        <item name="android:statusBarColor">@color/md_primary</item>
-        <item name="android:navigationBarColor">@color/sys_nav_gray</item>
-    </style>
+    <!-- API 19 无系统栏着色能力；21+ 着色见 values-v21/themes.xml -->
+    <style name="Theme.LiteMusic" parent="Theme.LiteMusic.Base" />
 
     <!-- M3 形状比例：extra-small 4dp / small 8dp / medium 12dp / large 16dp / extra-large 28dp -->
     <style name="ShapeAppearance.Lite.Rounded8" parent="">
@@ -74,9 +71,6 @@
         <item name="cornerSize">50%</item>
     </style>
 
-    <!-- 播放页：跟随深浅色模式（DayNight），系统栏取主题表面色 -->
-    <style name="Theme.LiteMusic.Player" parent="Theme.LiteMusic.Base">
-        <item name="android:statusBarColor">?attr/colorSurface</item>
-        <item name="android:navigationBarColor">?attr/colorSurface</item>
-    </style>
+    <!-- 播放页：跟随深浅色模式（DayNight），21+ 系统栏取主题表面色 -->
+    <style name="Theme.LiteMusic.Player" parent="Theme.LiteMusic.Base" />
 </resources>
